@@ -1,0 +1,54 @@
+name: Threads 定時投稿
+
+# JST 8:00 / 12:00 / 17:00 / 20:00 に投稿する。
+# GitHub の cron は数分〜十数分遅れることがあるため、15分前に起動して正時まで待つ。
+on:
+  schedule:
+    - cron: "45 22,2,7,10 * * *"
+  workflow_dispatch:
+    inputs:
+      now:
+        description: "待たずにすぐ投稿する"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: threads-post
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 正時まで待つ
+        if: github.event_name == 'schedule'
+        run: |
+          now=$(date -u +%s)
+          target=$(( (now / 3600 + 1) * 3600 ))
+          wait=$(( target - now ))
+          if [ "$wait" -gt 0 ] && [ "$wait" -le 1800 ]; then echo "wait ${wait}s"; sleep "$wait"; fi
+
+      - name: 投稿
+        env:
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+          THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
+          IMAGE_BASE_URL: https://raw.githubusercontent.com/${{ github.repository }}/main/posts
+        run: node scripts/post.mjs
+
+      - name: 投稿記録を保存
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/posted.json
+          git commit -m "posted: $(date -u +%FT%TZ)" || exit 0
+          git pull --rebase
+          git push
