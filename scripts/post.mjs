@@ -3,6 +3,7 @@
 // --dry-run で投稿せずに内容だけ表示する
 import fs from 'node:fs';
 import path from 'node:path';
+import { buildCaption } from './caption.mjs';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const postsFile = path.join(root, 'data/posts.json');
@@ -20,17 +21,7 @@ if (!next) {
   process.exit(2);
 }
 
-const caption = [
-  next.title.join(''),
-  '',
-  next.sub.join(''),
-  '',
-  `結局、${next.lead.replace(/^結局、/, '')}“${next.kw}”だけじゃない。`,
-  `${next.maxim[0]}${next.maxim[1]}`,
-  '',
-  '保存して、転職活動中に見返してください。',
-  '※あくまで個人の見解です。',
-].join('\n');
+const caption = buildCaption(next);
 
 const { THREADS_ACCESS_TOKEN: token, THREADS_USER_ID: userId, IMAGE_BASE_URL: base } = process.env;
 const imageUrls = [1, 2, 3, 4].map((n) => `${(base || '<IMAGE_BASE_URL>').replace(/\/$/, '')}/${next.id}/${n}.png`);

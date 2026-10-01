@@ -1,0 +1,49 @@
+name: Slack 投稿素材の送信
+
+# 投稿時刻（JST 8:00 / 12:00 / 17:00 / 20:00）の10分前に、次の1本を Slack DM に送る。
+# GitHub の cron は数分〜十数分遅れることがあるため、15分早く起動して :50 まで待つ。
+on:
+  schedule:
+    - cron: "35 22,2,7,10 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: slack-send
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 毎時50分まで待つ
+        if: github.event_name == 'schedule'
+        run: |
+          now=$(date -u +%s)
+          target=$(( now / 3600 * 3600 + 3000 ))
+          wait=$(( target - now ))
+          if [ "$wait" -gt 0 ]; then echo "wait ${wait}s"; sleep "$wait"; fi
+
+      - name: 送信
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_USER_ID: ${{ secrets.SLACK_USER_ID }}
+        run: node scripts/send-slack.mjs
+
+      - name: 送信記録を保存
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/sent.json 2>/dev/null || exit 0
+          git commit -m "sent: $(date -u +%FT%TZ)" || exit 0
+          git pull --rebase
+          git push
